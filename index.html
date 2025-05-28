@@ -5,8 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Impact Tracker - Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
-        <link rel="icon" href="logo.png" type="image/x-icon">
-
+    <link rel="icon" href="logo.png" type="image/x-icon">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
         @keyframes fadeIn {
@@ -21,9 +20,32 @@
             0%, 100% { transform: scale(1); }
             50% { transform: scale(1.01); }
         }
+        @keyframes pomodoroGlow {
+            0%, 100% { box-shadow: 0 0 15px rgba(239, 68, 68, 0.3); }
+            50% { box-shadow: 0 0 30px rgba(239, 68, 68, 0.5); }
+        }
+        @keyframes breakGlow {
+            0%, 100% { box-shadow: 0 0 15px rgba(34, 197, 94, 0.3); }
+            50% { box-shadow: 0 0 30px rgba(34, 197, 94, 0.5); }
+        }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+        @keyframes bounce {
+            0%, 20%, 53%, 80%, 100% { transform: translateY(0); }
+            40%, 43% { transform: translateY(-10px); }
+            70% { transform: translateY(-5px); }
+            90% { transform: translateY(-2px); }
+        }
         .fade-in { animation: fadeIn 0.4s ease-out; }
         .glow { animation: glow 3s infinite; }
         .pulse-slow { animation: pulse 2s infinite; }
+        .pomodoro-glow { animation: pomodoroGlow 2s infinite; }
+        .break-glow { animation: breakGlow 2s infinite; }
+        .shake { animation: shake 0.5s ease-in-out infinite; }
+        .bounce { animation: bounce 1s ease-in-out infinite; }
         .completed { opacity: 0.6; transform: scale(0.98); }
         .current-todo { 
             border: 1px solid #3b82f6; 
@@ -71,9 +93,51 @@
         .todo-scroll { 
             max-height: calc(100vh - 250px);
         }
+
+        /* Pomodoro timer styles */
+        .pomodoro-timer {
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            text-align: center;
+        }
+        
+        .time-button {
+            transition: all 0.2s ease;
+        }
+        .time-button:hover {
+            transform: scale(1.05);
+        }
+        .time-button.selected {
+            background: rgb(59, 130, 246);
+            color: white;
+            border-color: rgb(59, 130, 246);
+        }
+
+        /* Notification styles */
+        .notification-popup {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            max-width: 300px;
+            transform: translateX(110%);
+            transition: transform 0.3s ease-out;
+        }
+        .notification-popup.show {
+            transform: translateX(0);
+        }
     </style>
 </head>
 <body class="bg-slate-950 text-slate-100 h-screen overflow-hidden">
+    <!-- Hidden audio elements for notifications -->
+    <audio id="pomodoroEndSound" preload="auto">
+        <source src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1e6+eCMFl" type="audio/wav">
+    </audio>
+    
+    <audio id="breakEndSound" preload="auto">
+        <source src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1e6+eCMFl" type="audio/wav">
+    </audio>
+
     <div class="flex h-full">
         <!-- Sidebar -->
         <div class="sidebar w-80 bg-slate-900/50 border-r border-slate-800 flex flex-col">
@@ -157,16 +221,68 @@
 
         <!-- Main Content -->
         <div class="main-content flex-1 flex flex-col">
-            <!-- Current Focus -->
-            <div class="p-6 border-b border-slate-800 bg-slate-900/30 min-h-[200px]">
-                <h2 class="text-lg font-semibold mb-4 text-white flex items-center">
-                    <div class="w-2 h-2 bg-blue-400 rounded-full mr-3"></div>
-                    Current Focus
-                </h2>
-                <div id="currentTodo" class="flex items-center justify-center h-32">
-                    <div class="text-center text-slate-400">
-                        <div class="text-3xl mb-2 text-slate-600">☕</div>
-                        <p>Select a task to start working</p>
+            <!-- Top Section: Current Focus & Pomodoro Side by Side -->
+            <div class="flex border-b border-slate-800 bg-slate-900/30">
+                <!-- Current Focus (Left) -->
+                <div class="flex-1 p-6">
+                    <h2 class="text-lg font-semibold mb-4 text-white flex items-center">
+                        <div class="w-2 h-2 bg-blue-400 rounded-full mr-3"></div>
+                        Current Focus
+                    </h2>
+                    <div id="currentTodo" class="flex items-center justify-center" style="min-height: 140px;">
+                        <div class="text-center text-slate-400">
+                            <div class="text-3xl mb-2 text-slate-600">☕</div>
+                            <p>Select a task to start working</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Divider -->
+                <div class="w-px bg-slate-800"></div>
+
+                <!-- Pomodoro Timer (Right) -->
+                <div class="w-80 p-6">
+                    <div id="pomodoroWidget" class="bg-slate-800/30 border border-slate-700 rounded-lg p-4">
+                        <div class="flex justify-between items-center mb-3">
+                            <span class="text-sm font-medium text-white flex items-center">
+                                🍅 <span class="ml-2">Pomodoro</span>
+                            </span>
+                            <span id="pomodoroSession" class="text-xs text-orange-400">Session 1</span>
+                        </div>
+                        
+                        <!-- Timer Setup -->
+                        <div id="pomodoroSetup" class="space-y-3">
+                            <div class="grid grid-cols-4 gap-2">
+                                <button onclick="selectTime(15)" class="time-button bg-slate-700 hover:bg-slate-600 text-white text-xs py-2 px-2 rounded border border-slate-600" data-time="15">15m</button>
+                                <button onclick="selectTime(20)" class="time-button bg-slate-700 hover:bg-slate-600 text-white text-xs py-2 px-2 rounded border border-slate-600" data-time="20">20m</button>
+                                <button onclick="selectTime(25)" class="time-button bg-slate-700 hover:bg-slate-600 text-white text-xs py-2 px-2 rounded border border-slate-600 selected" data-time="25">25m</button>
+                                <button onclick="selectTime(30)" class="time-button bg-slate-700 hover:bg-slate-600 text-white text-xs py-2 px-2 rounded border border-slate-600" data-time="30">30m</button>
+                            </div>
+                            <input type="number" id="customTime" placeholder="Custom (min)" min="1" max="120" 
+                                   class="w-full bg-slate-700 border border-slate-600 text-white text-xs py-2 px-3 rounded focus:border-blue-500 focus:outline-none">
+                            <button onclick="startPomodoro()" class="w-full bg-red-600 hover:bg-red-700 text-white text-sm py-2 px-3 rounded transition-all">
+                                <i class="fas fa-play mr-2"></i>Start Focus
+                            </button>
+                        </div>
+
+                        <!-- Timer Display -->
+                        <div id="pomodoroDisplay" class="hidden space-y-3">
+                            <div class="text-center">
+                                <div id="timerDisplay" class="pomodoro-timer text-3xl text-white mb-1">25:00</div>
+                                <div id="timerStatus" class="text-sm text-red-400 mb-3">Focus Time</div>
+                                <div class="w-full bg-slate-700 rounded-full h-2 mb-3">
+                                    <div id="timerProgress" class="bg-red-500 h-2 rounded-full transition-all duration-1000" style="width: 100%"></div>
+                                </div>
+                            </div>
+                            <div class="flex gap-2">
+                                <button onclick="pausePomodoro()" id="pauseBtn" class="flex-1 bg-yellow-600 hover:bg-yellow-700 text-white text-xs py-2 px-2 rounded transition-all">
+                                    <i class="fas fa-pause mr-1"></i>Pause
+                                </button>
+                                <button onclick="stopPomodoro()" class="flex-1 bg-gray-600 hover:bg-gray-700 text-white text-xs py-2 px-2 rounded transition-all">
+                                    <i class="fas fa-stop mr-1"></i>Stop
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -207,11 +323,44 @@
         </div>
     </div>
 
+    <!-- Notification Popup -->
+    <div id="notificationPopup" class="notification-popup bg-slate-900 border border-slate-700 rounded-lg p-4 shadow-lg">
+        <div class="flex items-center gap-3">
+            <div id="notificationIcon" class="text-2xl">🍅</div>
+            <div class="flex-1">
+                <div id="notificationTitle" class="font-bold text-white text-sm">Timer Finished!</div>
+                <div id="notificationMessage" class="text-slate-300 text-xs">Time for a break!</div>
+            </div>
+            <button onclick="dismissNotification()" class="text-slate-400 hover:text-white">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="mt-3 flex gap-2">
+            <button id="notificationAction" onclick="handleNotificationAction()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-xs py-2 px-3 rounded transition-all">
+                Start Break
+            </button>
+            <button onclick="dismissNotification()" class="flex-1 bg-slate-700 hover:bg-slate-600 text-white text-xs py-2 px-3 rounded transition-all">
+                Dismiss
+            </button>
+        </div>
+    </div>
+
     <script>
         // Load data
         let todos = JSON.parse(localStorage.getItem('impactTodos') || '[]');
         let stats = JSON.parse(localStorage.getItem('impactStats') || '{"totalImpact": 0, "level": 1, "streak": 0}');
         let sidebarCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
+
+        // Pomodoro variables
+        let pomodoroTimer = null;
+        let pomodoroTime = 25; // default 25 minutes
+        let remainingTime = 0;
+        let totalTime = 0;
+        let isRunning = false;
+        let isPaused = false;
+        let isBreakTime = false;
+        let sessionCount = 1;
+        let notificationTimeout = null;
 
         function saveData() {
             localStorage.setItem('impactTodos', JSON.stringify(todos));
@@ -228,6 +377,274 @@
             collapsedStats.forEach(stat => {
                 stat.classList.toggle('hidden', !sidebarCollapsed);
             });
+        }
+
+        // Pomodoro Functions
+        function selectTime(minutes) {
+            pomodoroTime = minutes;
+            document.querySelectorAll('.time-button').forEach(btn => {
+                btn.classList.remove('selected');
+            });
+            document.querySelector(`[data-time="${minutes}"]`).classList.add('selected');
+            document.getElementById('customTime').value = '';
+        }
+
+        function startPomodoro() {
+            const customTime = document.getElementById('customTime').value;
+            if (customTime && customTime > 0) {
+                pomodoroTime = parseInt(customTime);
+            }
+            
+            totalTime = pomodoroTime * 60; // convert to seconds
+            remainingTime = totalTime;
+            isRunning = true;
+            isPaused = false;
+            isBreakTime = false;
+            
+            document.getElementById('pomodoroSetup').classList.add('hidden');
+            document.getElementById('pomodoroDisplay').classList.remove('hidden');
+            
+            updateTimerDisplay();
+            updateTimerStatus();
+            
+            // Request notification permission
+            if (Notification.permission === 'default') {
+                Notification.requestPermission();
+            }
+            
+            requestWakeLock();
+            pomodoroTimer = setInterval(updateTimer, 1000);
+        }
+
+        function pausePomodoro() {
+            if (isPaused) {
+                // Resume
+                isPaused = false;
+                pomodoroTimer = setInterval(updateTimer, 1000);
+                document.getElementById('pauseBtn').innerHTML = '<i class="fas fa-pause mr-1"></i>Pause';
+            } else {
+                // Pause
+                isPaused = true;
+                clearInterval(pomodoroTimer);
+                document.getElementById('pauseBtn').innerHTML = '<i class="fas fa-play mr-1"></i>Resume';
+            }
+        }
+
+        function stopPomodoro() {
+            clearInterval(pomodoroTimer);
+            isRunning = false;
+            isPaused = false;
+            isBreakTime = false;
+            sessionCount = 1;
+            
+            document.getElementById('pomodoroSetup').classList.remove('hidden');
+            document.getElementById('pomodoroDisplay').classList.add('hidden');
+            document.getElementById('pauseBtn').innerHTML = '<i class="fas fa-pause mr-1"></i>Pause';
+            document.getElementById('pomodoroSession').textContent = 'Session 1';
+            
+            // Remove glow effects
+            const widget = document.getElementById('pomodoroWidget');
+            widget.classList.remove('pomodoro-glow', 'break-glow');
+        }
+
+        function updateTimer() {
+            if (remainingTime <= 0) {
+                timerFinished();
+                return;
+            }
+            
+            remainingTime--;
+            updateTimerDisplay();
+            updateTimerProgress();
+        }
+
+        function updateTimerDisplay() {
+            const minutes = Math.floor(remainingTime / 60);
+            const seconds = remainingTime % 60;
+            document.getElementById('timerDisplay').textContent = 
+                `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        }
+
+        function updateTimerProgress() {
+            const progress = (remainingTime / totalTime) * 100;
+            document.getElementById('timerProgress').style.width = `${progress}%`;
+        }
+
+        function updateTimerStatus() {
+            const statusElement = document.getElementById('timerStatus');
+            const progressElement = document.getElementById('timerProgress');
+            const widget = document.getElementById('pomodoroWidget');
+            
+            if (isBreakTime) {
+                statusElement.textContent = 'Break Time';
+                statusElement.className = 'text-sm text-green-400 mb-3';
+                progressElement.className = 'bg-green-500 h-2 rounded-full transition-all duration-1000';
+                widget.classList.remove('pomodoro-glow');
+                widget.classList.add('break-glow');
+            } else {
+                statusElement.textContent = 'Focus Time';
+                statusElement.className = 'text-sm text-red-400 mb-3';
+                progressElement.className = 'bg-red-500 h-2 rounded-full transition-all duration-1000';
+                widget.classList.remove('break-glow');
+                widget.classList.add('pomodoro-glow');
+            }
+        }
+
+        function timerFinished() {
+            clearInterval(pomodoroTimer);
+            
+            if (isBreakTime) {
+                // Break finished, start new focus session
+                sessionCount++;
+                document.getElementById('pomodoroSession').textContent = `Session ${sessionCount}`;
+                
+                showNotification(
+                    '☕', 
+                    'Break Finished!', 
+                    'Ready for another focus session?',
+                    'Start Focus',
+                    () => startNewFocusSession()
+                );
+                
+                playSound('breakEndSound');
+                
+            } else {
+                // Focus session finished, start break
+                showNotification(
+                    '🎉', 
+                    'Focus Session Complete!', 
+                    'Great job! Time for a 5-minute break.',
+                    'Start Break',
+                    () => startBreak()
+                );
+                
+                playSound('pomodoroEndSound');
+            }
+            
+            // Add shake animation to the widget
+            const widget = document.getElementById('pomodoroWidget');
+            widget.classList.add('shake');
+            setTimeout(() => {
+                widget.classList.remove('shake');
+            }, 2000);
+        }
+
+        function startBreak() {
+            isBreakTime = true;
+            totalTime = 5 * 60; // 5 minutes break
+            remainingTime = totalTime;
+            
+            updateTimerDisplay();
+            updateTimerStatus();
+            
+            pomodoroTimer = setInterval(updateTimer, 1000);
+            dismissNotification();
+        }
+
+        function startNewFocusSession() {
+            isBreakTime = false;
+            totalTime = pomodoroTime * 60;
+            remainingTime = totalTime;
+            
+            updateTimerDisplay();
+            updateTimerStatus();
+            
+            pomodoroTimer = setInterval(updateTimer, 1000);
+            dismissNotification();
+        }
+
+        function showNotification(icon, title, message, actionText, actionCallback) {
+            // Browser notification
+            if (Notification.permission === 'granted') {
+                const notification = new Notification(title, {
+                    body: message,
+                    icon: 'logo.png',
+                    badge: 'logo.png'
+                });
+                
+                notification.onclick = () => {
+                    window.focus();
+                    notification.close();
+                    if (actionCallback) actionCallback();
+                };
+                
+                // Auto close after 10 seconds
+                setTimeout(() => notification.close(), 10000);
+            }
+            
+            // In-app notification popup
+            document.getElementById('notificationIcon').textContent = icon;
+            document.getElementById('notificationTitle').textContent = title;
+            document.getElementById('notificationMessage').textContent = message;
+            document.getElementById('notificationAction').textContent = actionText;
+            document.getElementById('notificationAction').onclick = actionCallback;
+            
+            const popup = document.getElementById('notificationPopup');
+            popup.classList.add('show');
+            
+            // Auto dismiss after 15 seconds
+            notificationTimeout = setTimeout(() => {
+                dismissNotification();
+            }, 15000);
+        }
+
+        function dismissNotification() {
+            const popup = document.getElementById('notificationPopup');
+            popup.classList.remove('show');
+            
+            if (notificationTimeout) {
+                clearTimeout(notificationTimeout);
+                notificationTimeout = null;
+            }
+        }
+
+        function handleNotificationAction() {
+            const actionButton = document.getElementById('notificationAction');
+            if (actionButton.onclick) {
+                actionButton.onclick();
+            }
+        }
+
+        function playSound(soundId) {
+            // Create a pleasant notification sound using Web Audio API
+            if (window.AudioContext || window.webkitAudioContext) {
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                
+                // Create a pleasant notification sound
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                
+                // Pleasant bell-like sound
+                oscillator.frequency.value = soundId === 'pomodoroEndSound' ? 800 : 600;
+                oscillator.type = 'sine';
+                
+                gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 1);
+                
+                oscillator.start(audioContext.currentTime);
+                oscillator.stop(audioContext.currentTime + 1);
+                
+                // Second tone for a pleasant chord
+                setTimeout(() => {
+                    const oscillator2 = audioContext.createOscillator();
+                    const gainNode2 = audioContext.createGain();
+                    
+                    oscillator2.connect(gainNode2);
+                    gainNode2.connect(audioContext.destination);
+                    
+                    oscillator2.frequency.value = soundId === 'pomodoroEndSound' ? 1000 : 750;
+                    oscillator2.type = 'sine';
+                    
+                    gainNode2.gain.setValueAtTime(0.2, audioContext.currentTime);
+                    gainNode2.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.8);
+                    
+                    oscillator2.start(audioContext.currentTime);
+                    oscillator2.stop(audioContext.currentTime + 0.8);
+                }, 200);
+            }
         }
 
         function updateStats() {
@@ -352,7 +769,7 @@
                 `;
             } else {
                 currentTodoSection.innerHTML = `
-                    <div class="text-center py-8">
+                    <div class="text-center">
                         <div class="text-3xl mb-2 text-slate-600">☕</div>
                         <p class="text-slate-400 text-sm">Select a task to start working</p>
                     </div>
@@ -410,6 +827,19 @@
             }, 1000);
         }
 
+        // Wake lock functionality
+        let wakeLock = null;
+        
+        async function requestWakeLock() {
+            try {
+                if ('wakeLock' in navigator) {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                }
+            } catch (err) {
+                console.log('Wake lock not supported or failed:', err);
+            }
+        }
+
         // Initialize
         if (sidebarCollapsed) {
             document.body.classList.add('sidebar-collapsed');
@@ -426,6 +856,23 @@
             updateStats();
             renderTodos();
         }, 60000);
+
+        // Cleanup when page unloads
+        window.addEventListener('beforeunload', () => {
+            if (pomodoroTimer) {
+                clearInterval(pomodoroTimer);
+            }
+            if (notificationTimeout) {
+                clearTimeout(notificationTimeout);
+            }
+        });
+
+        // Request notification permission on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            if ('Notification' in window && Notification.permission === 'default') {
+                Notification.requestPermission();
+            }
+        });
     </script>
 </body>
 </html>

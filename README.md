@@ -6,6 +6,7 @@ A simple impact-focused task management web application that helps you track mea
 
 - **Impact Point System**: Assign impact points (1-10) to tasks based on their value
 - **Progress Tracking**: Track total impact, level progression, and streaks
+- **Pomodoro Timer**: All in one Todo list with Pomodoro
 - **Quick Templates**: Pre-built task templates for common activities
 - **Modern Dark UI**: Clean slate theme with smooth animations
 - **Local Storage**: Tasks saved in JSON format locally
